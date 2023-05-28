@@ -9,6 +9,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.svm import SVC
 import streamlit as st
 
+import constants as c
+
 
 @st.cache_data
 def do_preprocessing(data):
@@ -120,192 +122,102 @@ def replace_string(string):
         return 0
 
 
-def replace_none(series):
-    if series[0] is None:
-        return 0
+class Recommender:
+    def __init__(self, df):
+        self.df_ = df
+        self.features_ = df.drop('Role', axis=1)
+        self.target_ = self.df_.Role
+        self.feature_names_ = []
+        self.lda_ = LDA()
+        self.X_train_encoded_ = pd.DataFrame()
+        self.X_LDA_valid_ = pd.DataFrame()
+        self.svc_ = SVC(C=10, gamma=0.1, kernel='rbf', probability=True)
 
 
-def recommender_svc(df, target, X_valid):
-    X_train, X_test, y_train, y_test = train_test_split(df, target, test_size=0.2, random_state=42)
+    def train_svc(self):
+        X_train, X_test, y_train, y_test = train_test_split(self.features_, self.target_, test_size=0.2, random_state=42)
 
-    # for applying recommender system to peoples choices on questionare
-    X_test = X_valid
+        X_train.reset_index(drop=True, inplace=True)
+        y_test.reset_index(drop=True, inplace=True)
+        y_train.reset_index(drop=True, inplace=True)
 
-    X_train.reset_index(drop=True, inplace=True)
-    X_test.reset_index(drop=True, inplace=True)
-    y_test.reset_index(drop=True, inplace=True)
-    y_train.reset_index(drop=True, inplace=True)
+        for col in c.cat_binary:
+            X_train[col] = X_train[col].apply(replace_string)
 
-    cat_binary = ['Python', 'R', 'SQL', 'C', 'C++', 'Java',
-                  'Javascript', 'Julia', 'Swift', 'Bash', 'MATLAB used',
-                  'None pr. language', 'Other pr.languages',
-                  'JupyterLab', 'RStudio', 'Visual Studio', 'Visual Studio Code',
-                  'PyCharm', 'Spyder', 'Notepad++', 'Sublime Text', 'Vim / Emacs',
-                  'MATLAB', 'No IDE', 'Q9_OTHER', 'Kaggle Notebooks', 'Colab Notebooks',
-                  'Azure Notebooks', 'Paperspace / Gradient', 'Binder / JupyterHub',
-                  'Code Ocean', 'IBM Watson Studio', 'Amazon Sagemaker Studio',
-                  'Amazon EMR Notebooks', 'Google Cloud AI Platform Notebooks',
-                  'Google Cloud Datalab Notebooks', 'Databricks Collaborative Notebooks',
-                  'No Notebook', 'Other Notebook', 'GPUs',
-                  'TPUs', 'No HW', 'other HW', 'Matplotlib', 'Seaborn',
-                  'Plotly / Plotly Express', 'Ggplot / ggplot2', 'Shiny', 'D3js',
-                  'Altair', 'Bokeh', 'Geoplotlib', 'Leaflet / Folium', 'No libs',
-                  'Q14_OTHER', 'Scikit-learn',
-                  'Decision Trees or Random Forests', 'Keras', 'PyTorch', 'Fast.ai',
-                  'MXNet', 'Xgboost', 'LightGBM', 'CatBoost', 'Prophet', 'H2O3', 'Caret',
-                  'Tidymodels', 'JAX', 'No ML framework used', 'Q16_OTHER', 'Linear or Logistic Regression',
-                  'TensorFlow', 'Gradient Boosting Machines', 'Bayesian Approaches',
-                  'Evolutionary Approaches', 'Dense Neural Networks',
-                  'Convolutional Neural Networks', 'Generative Adversarial Networks',
-                  'Recurrent Neural Networks', 'Transformer Networks', 'No ML algorithm',
-                  'Q17_OTHER', 'Q23_Part_1', 'Q23_Part_2',
-                  'Q23_Part_3', 'Q23_Part_4', 'Q23_Part_5', 'Q23_Part_6', 'Q23_Part_7',
-                  'Q23_OTHER',
-                  'Amazon Web Services', 'Microsoft Azure', 'Google Cloud Platform',
-                  'Q26_A_Part_4', 'Q26_A_Part_5', 'Q26_A_Part_6', 'Q26_A_Part_7',
-                  'Q26_A_Part_8', 'Q26_A_Part_9', 'Q26_A_Part_10', 'No cloud pl. used',
-                  'Q26_A_OTHER', 'Amazon EC2', 'AWS Lambda',
-                  'Amazon Elastic Container Service', 'Azure Cloud Services',
-                  'Microsoft Azure Container Instances', 'Azure Functions',
-                  'Google Cloud Compute Engine', 'Google Cloud Functions',
-                  'Google Cloud Run', 'Google Cloud App Engine', 'No cloud c. platform',
-                  'Other cloud c. platform', 'MySQL', 'PostgresSQL', 'SQLite', 'Q29_A_Part_4',
-                  'MongoDB', 'Q29_A_Part_6', 'Q29_A_Part_7',
-                  'Microsoft SQL Server', 'Q29_A_Part_9', 'Q29_A_Part_10',
-                  'Q29_A_Part_11', 'Q29_A_Part_12', 'Q29_A_Part_13', 'Q29_A_Part_14',
-                  'Q29_A_Part_15', 'Q29_A_Part_16', 'No big data', 'Q29_A_OTHER',
-                  'Q36_Part_1', 'Q36_Part_2', 'Q36_Part_3',
-                  'Q36_Part_4', 'Q36_Part_5', 'Q36_Part_6', 'Q36_Part_7', 'Q36_Part_8',
-                  'Q36_Part_9', 'Q36_OTHER', 'Q37_Part_1', 'Q37_Part_2', 'Q37_Part_3',
-                  'Q37_Part_4', 'Q37_Part_5', 'Q37_Part_6', 'Q37_Part_7', 'Q37_Part_8',
-                  'Q37_Part_9', 'Q37_Part_10', 'Q37_Part_11', 'Q37_OTHER',
-                  'Q39_Part_1', 'Q39_Part_2', 'Q39_Part_3', 'Q39_Part_4', 'Q39_Part_5',
-                  'Q39_Part_6', 'Q39_Part_7', 'Q39_Part_8', 'Q39_Part_9', 'Q39_Part_10',
-                  'Q39_Part_11', 'Q39_OTHER']
+        imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
 
-    for col in cat_binary:
-        X_train[col] = X_train[col].apply(replace_string)
-        X_test[col] = X_test[col].apply(replace_string)
+        cat_all = ['Recommended pr. language', 'Programming Experience',
+               'ML experience', 'Team spent on ML', 'computing platform used', 'usage TPU',
+               'Big Data Products', 'Primary Visualization tool', 'Q22']
+        X_train[cat_all] = imputer.fit_transform(X_train[cat_all])
 
-    imputer = SimpleImputer(missing_values=np.nan, strategy='most_frequent')
+        # Convert the strings to numerical values
+        X_train['ML experience'] = X_train['ML experience'].apply(lambda exp: c.experience_mapping.get(exp, -999))
+        X_train['Programming Experience'] = X_train['Programming Experience'].apply(
+            lambda exp: c.experience_mapping2.get(exp, -999))
+        X_train['Team spent on ML'] = X_train['Team spent on ML'].apply(lambda exp: c.experience_mapping6.get(exp, -999))
 
-    cat = ['Recommended pr. language', 'Programming Experience',
-           'ML experience', 'Team spent on ML', 'computing platform used', 'usage TPU',
-           'Big Data Products', 'Primary Visualization tool', 'Q22']
+        X_train_binary = X_train.drop(c.cat, axis=1)
 
-    X_train[cat] = imputer.fit_transform(X_train[cat])
-    # X_test[cat] = X_test[cat].apply(replace_none)
-    X_test[['hadoop', 'spark', 'kafka']] = X_test[['hadoop', 'spark', 'kafka']].fillna(0)
+        one = OneHotEncoder(drop='first', sparse=False)
 
-    experience_mapping = {
-        'Under 1 year': 0,
-        '1-2 years': 0,
-        '2-3 years': 0,
-        '3-4 years': 1,
-        '4-5 years': 1,
-        '5-10 years': 2,
-        '10-20 years': 3,
-        '20 or more years': 3,
-        'I do not use machine learning methods': -1,
-    }
+        for col in c.cat:
+            X_train[col] = X_train[col].map(str)
 
-    # Convert the strings to numerical values
-    X_train['ML experience'] = X_train['ML experience'].apply(lambda exp: experience_mapping.get(exp, -999))
-    X_test['ML experience'] = X_test['ML experience'].apply(lambda exp: experience_mapping.get(exp, -999))
+        # apply encoding to categorical non-order variables
+        X_train_cat = one.fit_transform(X_train[c.cat])
+        self.feature_names_ = one.get_feature_names_out(c.cat)
+        X_train_cat = pd.DataFrame(X_train_cat, columns=self.feature_names_)
 
-    experience_mapping2 = {
-        '< 1 years': 0,
-        '1-2 years': 0,
-        '3-5 years': 1,
-        '5-10 years': 1,
-        '10-20 years': 2,
-        '20+ years': 2,
-        'I have never written code': -1,  # or any other appropriate value for missing or unspecified experience
-    }
+        # reset index
+        X_train_binary = X_train_binary.reset_index(drop=True)
+        X_train_cat = X_train_cat.reset_index(drop=True)
+        self.X_train_encoded_ = pd.concat([X_train_binary, X_train_cat], axis=1)
 
-    X_train['Programming Experience'] = X_train['Programming Experience'].apply(
-        lambda exp: experience_mapping2.get(exp, -999))
-    X_test['Programming Experience'] = X_test['Programming Experience'].apply(
-        lambda exp: experience_mapping2.get(exp, -999))
+        le = LabelEncoder()
+        y_train = le.fit_transform(y_train.map(str))
 
-    experience_mapping6 = {
-        '$0 ($USD)': 0,
-        '$1-$99': 0,
-        '$100-$999': 1,
-        '$1000-$9,999': 1,
-        '$10,000-$99,999': 2,
-        '$100,000 or more ($USD)': 2
-    }
+        adasyn = ADASYN()
+        X_resampled_adasyn, y_resampled_adasyn = adasyn.fit_resample(self.X_train_encoded_, y_train)
 
-    X_train['Team spent on ML'] = X_train['Team spent on ML'].apply(lambda exp: experience_mapping6.get(exp, -999))
-    X_test['Team spent on ML'] = X_test['Team spent on ML'].apply(lambda exp: experience_mapping6.get(exp, -999))
+        X_LDA = self.lda_.fit_transform(X_resampled_adasyn, y_resampled_adasyn)
 
-    cat = ['Recommended pr. language', 'computing platform used', 'usage TPU',
-           'Big Data Products', 'Primary Visualization tool', 'Q22']
-    X_train_binary = X_train.drop(cat, axis=1)
+        self.svc_.fit(X_LDA, y_resampled_adasyn)
 
-    one = OneHotEncoder(drop='first', sparse=False)
 
-    for col in cat:
-        X_train[col] = X_train[col].map(str)
-        X_test[col] = X_test[col].map(str)
+    def do_encoding_for_prediction(self, X_valid):
+        X_valid.reset_index(drop=True, inplace=True)
 
-    # for to predicted X-test add columns from onehot encoding manually
-    for col in range(0, len(cat)):
-        column_name = X_test[cat[col]].name + '_' + X_test[cat[col]].values[0]
-        X_test[column_name] = 1
-        X_test.drop(X_test[cat[col]].name, axis=1, inplace=True)
+        for col in c.cat_binary:
+            X_valid[col] = X_valid[col].apply(replace_string)
+            X_valid[['hadoop', 'spark', 'kafka']] = X_valid[['hadoop', 'spark', 'kafka']].fillna(0)
 
-    # apply encoding to categorical non-order variables
-    X_train_cat = one.fit_transform(X_train[cat])
-    feature_names = one.get_feature_names_out(cat)
-    X_train_cat = pd.DataFrame(X_train_cat, columns=feature_names)
+        X_valid['ML experience'] = X_valid['ML experience'].apply(lambda exp: c.experience_mapping.get(exp, -999))
+        X_valid['Programming Experience'] = X_valid['Programming Experience'].apply(
+                    lambda exp: c.experience_mapping2.get(exp, -999))
+        X_valid['Team spent on ML'] = X_valid['Team spent on ML'].apply(lambda exp: c.experience_mapping6.get(exp, -999))
 
-    # compare 2 sets of feature names from X-train and X-test and add missing ones
-    # X-test with value of 0
-    missing_features = set(feature_names) - set(X_test.columns)
-    # ToDo. list comprehension or map
-    for mf in missing_features:
-        X_test[mf] = 0
+        for col in c.cat:
+            X_valid[col] = X_valid[col].map(str)
 
-    # reset index
-    X_train_binary = X_train_binary.reset_index(drop=True)
-    X_train_cat = X_train_cat.reset_index(drop=True)
-    X_train_encoded = pd.concat([X_train_binary, X_train_cat], axis=1)
+        # do onehot encoding manually
+        for col in range(0, len(c.cat)):
+            column_name = X_valid[c.cat[col]].name + '_' + X_valid[c.cat[col]].values[0]
+            X_valid[column_name] = 1
+            X_valid.drop(X_valid[c.cat[col]].name, axis=1, inplace=True)
 
-    X_test_encoded = X_test
+        missing_features = set(self.feature_names_) - set(X_valid.columns)
+        for mf in missing_features:
+            X_valid[mf] = 0
 
-    # columns including options that have never been answered by people, are not
-    # existent in the training set and therefore need to be removed from the test set
-    column_diff = set(X_test_encoded.columns) - set(X_train_encoded.columns)
-    if len(column_diff) != 0:
-        X_test_encoded.drop(column_diff, axis=1, inplace=True)
+        # columns including options that have never been answered by people, are not
+        # existent in the training set and therefore need to be removed from the test set
+        column_diff = set(X_valid.columns) - set(self.X_train_encoded_.columns)
+        if len(column_diff) != 0:
+            X_valid.drop(column_diff, axis=1, inplace=True)
 
-    # reorder x_test according to X_train
-    new_column_order = X_train_encoded.columns  # Get the desired column ordering from other_df
-    X_test_encoded = X_test_encoded.reindex(columns=new_column_order)
+        # reorder x_test according to X_train
+        new_column_order = self.X_train_encoded_.columns  # Get the desired column ordering from other_df
+        X_valid = X_valid.reindex(columns=new_column_order)
 
-    le = LabelEncoder()
-    y_train = le.fit_transform(y_train.map(str))
-
-    adasyn = ADASYN()
-    X_resampled_adasyn, y_resampled_adasyn = adasyn.fit_resample(X_train_encoded, y_train)
-
-    lda = LDA()
-    X_LDA = lda.fit_transform(X_resampled_adasyn, y_resampled_adasyn)
-    X_LDA_test = lda.transform(X_test_encoded)
-
-    # Classifier
-    y_train = y_resampled_adasyn
-    X_train = X_LDA
-    svc = SVC(C=10, gamma=0.1, kernel='rbf', probability=True)
-    svc.fit(X_train, y_train)
-
-    #y_pred = svc.predict(X_test)
-    #y_pred_subset = y_pred[:len(y_test)]
-    #print(pd.crosstab(y_test, y_pred_subset, rownames=['True'], colnames=['Prediction']))
-    #print(classification_report(y_test, y_pred_subset, ))
-    #accuracy = accuracy_score(y_test, y_pred_subset)
-    #print("Accuracy of the SVC model:", accuracy)
-
-    return svc, X_LDA_test
+        self.X_LDA_valid_ = self.lda_.transform(X_valid)

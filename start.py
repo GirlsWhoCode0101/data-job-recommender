@@ -1,8 +1,7 @@
-import streamlit as st
 import pandas as pd
-import numpy as np
 import recommender as rc
 import re
+import streamlit as st
 
 
 def get_choice(q, df):
@@ -22,17 +21,16 @@ page = st.sidebar.radio("Do you like to know which data job suits you best? \n"
 
 df = pd.read_csv('kaggle_survey_2020_responses.csv')
 questions, df_preproc = rc.do_preprocessing(df)
-target = df_preproc.Role
+recommender = rc.Recommender(df_preproc)
+recommender.train_svc()
 
 try:
     df_preproc.drop('Role', axis=1, inplace=True)
 except KeyError:
     print('Already dropped column Role')
 X_valid = pd.DataFrame(columns=df_preproc.columns)
-# ToDo: clean questions series!!!
+# ToDo: clean questions series!!! do in a seperate function
 
-
-# ToDo: create map
 for q in range(0, len(questions)):
     cleaned_question = re.findall(r'.*\(Select all that apply\)', questions[q])
     if len(cleaned_question) > 0:
@@ -75,7 +73,7 @@ if page == pages[0]:
                     if df_preproc.iloc[:, c].name == opt:
                         X_valid.loc[0, df_preproc.iloc[:, c].name] = opt
 
-    option = st.multiselect('Do you use Hadoop, Spark or Kafka? Select all that apply.',
+    option = st.multiselect('Do you have experience with Hadoop, Spark or Kafka? Select all that apply.',
                         ['spark', 'hadoop', 'kafka', 'None'],
                         default=None)
     for opt in option:
@@ -83,17 +81,16 @@ if page == pages[0]:
             if df_preproc.iloc[:, c].name == opt:
                 X_valid.loc[0, df_preproc.iloc[:, c].name] = 1
 
-    button_clicked = st.button('Ready, Go!')
+    button_clicked = st.button('Submit your answers.')
 
     if button_clicked:
-        svc, X_valid_encoded = rc.recommender_svc(df_preproc, target, X_valid)
-        probabilities_class = svc.predict_proba(X_valid_encoded)
+        recommender.do_encoding_for_prediction(X_valid)
+        probabilities_class = recommender.svc_.predict_proba(recommender.X_LDA_valid_)
         print(probabilities_class)
-        class_labels = svc.classes_
         index_max_class = probabilities_class.argmax()
         classes = {0: 'Business Analyst', 1: 'Data Analyst', 2: 'Data Engineer', 3: 'Data Scientest', 4: 'ML Engineer'}
 
-        if probabilities_class.max() > 0.5:
+        if probabilities_class.max() > 0.6:
             st.write('With your skill set, we recommend a role as: ', classes[index_max_class])
         else:
-            st.write('You should put more effort in your education and skills set to fit in the Data World.')
+            st.write('You should put more effort in your education and skill set to fit in the Data World.')
