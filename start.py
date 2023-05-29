@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import recommender as rc
 import re
 import streamlit as st
@@ -65,6 +66,7 @@ if page == pages[0]:
                 choice = []
                 for cnt in range(q, questions_count[index_question] + q):
                     choice.append(get_choice(cnt, df_preproc))
+                choice = list(map(lambda obj: 'None' if isinstance(obj, (np.ndarray, np.generic)) else obj, choice))
                 updated_question_index = q + questions_count[index_question]
                 option_multi = st.multiselect(questions[q][0], choice, default=None)
         if len(option_multi) > 0:
