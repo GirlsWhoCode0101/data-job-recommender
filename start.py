@@ -1,4 +1,5 @@
 import pandas as pd
+from PIL import Image
 import numpy as np
 import recommender as rc
 import re
@@ -96,3 +97,7 @@ if page == pages[0]:
             st.write('With your skill set, we recommend a role as: ', classes[index_max_class])
         else:
             st.write('You should put more effort in your education and skill set to fit in the Data World.')
+
+if page == pages[1]:
+    image = Image.open('DataJob_dash.png')
+    st.image(image, caption='Data Job Survey 2020 insights', use_column_width=True)
