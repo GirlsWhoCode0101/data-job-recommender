@@ -91,7 +91,7 @@ if page == pages[0]:
         probabilities_class = recommender.svc_.predict_proba(recommender.X_LDA_valid_)
         print(probabilities_class)
         index_max_class = probabilities_class.argmax()
-        classes = {0: 'Business Analyst', 1: 'Data Analyst', 2: 'Data Engineer', 3: 'Data Scientest', 4: 'ML Engineer'}
+        classes = {0: 'Business Analyst', 1: 'Data Analyst', 2: 'Data Engineer', 3: 'Data Scientist', 4: 'ML Engineer'}
 
         if probabilities_class.max() > 0.6:
             st.write('With your skill set, we recommend a role as: ', classes[index_max_class])
